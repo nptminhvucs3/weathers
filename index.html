@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<title>Thời tiết của tôi</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2b78de">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Thời tiết">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🌤️%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --page: #eef1f5; --ink: #17222f; --muted: #5d6b7b; --line: rgba(23,34,47,.12); --sheet: #ffffff; --accent: #2f6fdb;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --page: #0f1720; --ink: #e8eef5; --muted: #93a2b3; --line: rgba(232,238,245,.14); --sheet: #1a2431; --accent: #6ea2ff; }
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { background: #2b78de; scroll-padding-top: env(safe-area-inset-top, 0px); -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; color: #fff; min-height: 100vh;
+    font-family: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; line-height: 1.4;
+  }
+  /* Nền bầu trời giống hình nền widget */
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: -1;
+    background:
+      radial-gradient(ellipse 45% 9% at 18% 14%, rgba(255,255,255,.60), transparent 70%),
+      radial-gradient(ellipse 38% 7% at 85% 26%, rgba(255,255,255,.45), transparent 70%),
+      radial-gradient(ellipse 55% 8% at 30% 62%, rgba(255,255,255,.35), transparent 70%),
+      radial-gradient(ellipse 40% 7% at 90% 84%, rgba(255,255,255,.35), transparent 70%),
+      linear-gradient(180deg, #2b78de 0%, #4d9aee 45%, #9fcdf8 100%);
+  }
+  @media (prefers-color-scheme: dark) {
+    body::before {
+      background:
+        radial-gradient(ellipse 45% 8% at 18% 14%, rgba(255,255,255,.16), transparent 70%),
+        radial-gradient(ellipse 50% 8% at 70% 60%, rgba(255,255,255,.10), transparent 70%),
+        linear-gradient(180deg, #0b1a38 0%, #153160 55%, #274f88 100%);
+    }
+  }
+  button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; -webkit-tap-highlight-color: transparent; }
+  input { font: inherit; color: inherit; }
+  svg { display: block; }
+
+  .wrap { max-width: 560px; margin: 0 auto; padding: 14px 14px 100px; }
+  header.top { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 4px 16px; }
+  header.top h1 { font-size: 1.4rem; font-weight: 700; margin: 0; letter-spacing: -.01em; text-shadow: 0 1px 8px rgba(10,40,90,.35); }
+  header.top p { margin: 2px 0 0; font-size: .8rem; color: rgba(255,255,255,.85); text-shadow: 0 1px 6px rgba(10,40,90,.35); }
+  .tools { display: flex; gap: 8px; align-items: center; }
+  .glass { background: rgba(20,40,80,.38); border: 1px solid rgba(255,255,255,.22); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); color: #fff; }
+  .iconbtn { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; }
+  .pill { height: 44px; padding: 0 16px; border-radius: 22px; font-size: .9rem; font-weight: 500; }
+  .iconbtn.spin svg { animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .banner { margin: 0 4px 12px; padding: 12px 14px; border-radius: 14px; font-size: .85rem; background: #fff3cd; color: #4d3a00; }
+  .banner[hidden] { display: none; }
+  .banner small { display: block; margin-top: 4px; opacity: .8; }
+
+  /* Thẻ kiểu widget: kính mờ, chữ trắng, màu đổi theo trời */
+  .card { --c1: rgba(72,90,128,.84); --c2: rgba(44,58,92,.88);
+    border-radius: 26px; margin-bottom: 14px; color: #fff; overflow: hidden;
+    background: linear-gradient(160deg, var(--c1), var(--c2));
+    backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255,255,255,.16); box-shadow: 0 10px 28px rgba(8,28,70,.28); }
+  .card[data-sky="sun"]        { --c1: rgba(46,104,186,.84); --c2: rgba(30,66,136,.9); }
+  .card[data-sky="cloud"]      { --c1: rgba(78,96,134,.84);  --c2: rgba(48,62,98,.9); }
+  .card[data-sky="rain"]       { --c1: rgba(66,82,104,.88);  --c2: rgba(38,50,70,.92); }
+  .card[data-sky="storm"]      { --c1: rgba(78,70,112,.9);   --c2: rgba(40,34,70,.94); }
+  .card[data-sky="fog"]        { --c1: rgba(98,110,124,.86); --c2: rgba(64,74,90,.9); }
+  .card[data-sky="night"]      { --c1: rgba(34,46,86,.9);    --c2: rgba(16,22,48,.94); }
+  .card[data-sky="nightcloud"] { --c1: rgba(46,56,92,.9);    --c2: rgba(20,26,52,.94); }
+  .card[data-sky="error"]      { --c1: rgba(80,88,104,.85);  --c2: rgba(52,58,72,.9); }
+
+  .head { width: 100%; text-align: left; padding: 18px 18px 16px; display: block; color: #fff; }
+  .top-row { display: flex; align-items: center; gap: 10px; }
+  .big-ic { width: 76px; height: 76px; flex: 0 0 auto; filter: drop-shadow(0 4px 8px rgba(0,0,0,.25)); }
+  .temp { font-size: 4.4rem; font-weight: 300; line-height: 1; letter-spacing: -.045em; white-space: nowrap; display: flex; align-items: flex-start; }
+  .ring { display: inline-block; width: 13px; height: 13px; border: 3px solid rgba(255,255,255,.6); border-radius: 50%; margin: .55rem 0 0 6px; flex: 0 0 auto; }
+  .where { flex: 1; min-width: 0; padding-left: 4px; }
+  .place { font-size: 1.05rem; font-weight: 600; margin: 0; overflow-wrap: anywhere; line-height: 1.25; }
+  .cond { font-size: 1rem; font-weight: 500; margin: 4px 0 0; }
+
+  .hourly { display: grid; grid-template-columns: repeat(6, 1fr); margin-top: 18px; text-align: center; }
+  .hourly b { display: block; font-weight: 600; font-size: 1.05rem; }
+  .hourly svg { width: 30px; height: 30px; margin: 6px auto; }
+  .hourly span { display: block; color: rgba(255,255,255,.58); font-size: .78rem; }
+
+  .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+  .chip { background: rgba(255,255,255,.13); border-radius: 999px; padding: 4px 11px; font-size: .78rem; white-space: nowrap; }
+  .hint { margin: 12px 0 0; font-size: .84rem; color: rgba(255,255,255,.82); }
+  .stamp { margin: 6px 0 0; font-size: .72rem; color: rgba(255,255,255,.55); }
+  .more { display: flex; justify-content: center; margin-top: 8px; color: rgba(255,255,255,.55); }
+  .more svg { width: 18px; height: 18px; transition: transform .2s; }
+  .card.open .more svg { transform: rotate(180deg); }
+
+  .detail { display: none; padding: 0 18px 18px; }
+  .card.open .detail { display: block; }
+  .detail h3 { font-size: .85rem; font-weight: 600; margin: 8px 0 8px; color: rgba(255,255,255,.7); }
+  .hours { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 8px; scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
+  .hr { flex: 0 0 auto; width: 60px; text-align: center; background: rgba(255,255,255,.1); border-radius: 16px; padding: 10px 4px; }
+  .hr b { display: block; font-weight: 600; font-size: .98rem; }
+  .hr span { display: block; font-size: .72rem; color: rgba(255,255,255,.6); }
+  .hr svg { width: 28px; height: 28px; margin: 6px auto; }
+  .days { list-style: none; margin: 0 0 4px; padding: 0; }
+  .days li { display: grid; grid-template-columns: 64px 30px 1fr auto; align-items: center; gap: 8px; padding: 8px 0; border-top: 1px solid rgba(255,255,255,.12); font-size: .9rem; }
+  .days li:first-child { border-top: 0; }
+  .days svg { width: 26px; height: 26px; }
+  .days .rain { font-size: .78rem; color: rgba(255,255,255,.65); }
+  .days .mm { text-align: right; white-space: nowrap; font-weight: 600; }
+  .days .mm span { font-weight: 400; color: rgba(255,255,255,.6); }
+
+  /* Thanh chỉnh sửa: chỉ hiện khi bấm "Chỉnh sửa" */
+  .editbar { display: none; gap: 8px; padding: 14px 14px 0; flex-wrap: wrap; }
+  .editing .editbar { display: flex; }
+  .eb { background: rgba(255,255,255,.16); border-radius: 12px; padding: 0 14px; min-height: 44px; font-size: .88rem; color: #fff; }
+  .eb.del { background: #e5484d; font-weight: 600; }
+  .editing .head { padding-top: 12px; }
+
+  .skeleton { height: 190px; border-radius: 26px; margin-bottom: 14px; background: linear-gradient(90deg, rgba(255,255,255,.14), rgba(255,255,255,.28), rgba(255,255,255,.14)); background-size: 200% 100%; animation: sh 1.4s linear infinite; }
+  @keyframes sh { to { background-position: -200% 0; } }
+  .errtxt { margin: 12px 0 0; font-size: .85rem; color: rgba(255,255,255,.82); }
+  .empty { text-align: center; padding: 40px 20px; color: #fff; text-shadow: 0 1px 6px rgba(10,40,90,.35); }
+
+  .fab { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); height: 54px; padding: 0 22px; border-radius: 27px;
+    background: #fff; color: #1b4fa8; font-weight: 600; box-shadow: 0 8px 22px rgba(8,28,70,.35); }
+
+  dialog { width: min(520px, 94vw); border: 0; border-radius: 22px; padding: 0; background: var(--sheet); color: var(--ink); max-height: 88vh; }
+  dialog::backdrop { background: rgba(0,0,0,.5); }
+  .dlg { padding: 18px; }
+  .dlg h2 { font-size: 1.1rem; margin: 0 0 12px; }
+  .dlg h3 { font-size: .9rem; margin: 18px 0 6px; }
+  .dlg p.sm { font-size: .8rem; color: var(--muted); margin: 4px 0 8px; }
+  .field { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--page); color: var(--ink); font-size: 1rem; margin-bottom: 8px; }
+  .field:focus-visible, button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+  dialog .field:focus-visible, dialog button:focus-visible { outline-color: var(--accent); }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .results { list-style: none; margin: 8px 0 0; padding: 0; }
+  .results button { width: 100%; text-align: left; padding: 12px; border-radius: 12px; min-height: 48px; color: var(--ink); }
+  .results button:hover { background: var(--page); }
+  .results small { display: block; color: var(--muted); }
+  .primary { background: var(--accent); color: #fff; border-radius: 12px; padding: 12px 18px; font-weight: 600; min-height: 46px; }
+  @media (prefers-color-scheme: dark) { .primary { color: #0b1626; } }
+  .ghost { padding: 12px 18px; border-radius: 12px; border: 1px solid var(--line); min-height: 46px; color: var(--ink); }
+  .btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+  .msg { font-size: .85rem; color: var(--muted); margin: 6px 0 0; min-height: 1.2em; }
+
+  @media (max-width: 380px) { .temp { font-size: 3.7rem; } .big-ic { width: 64px; height: 64px; } .hourly b { font-size: .95rem; } }
+  @media (prefers-reduced-motion: reduce) { .iconbtn.spin svg, .skeleton { animation: none; } .more svg { transition: none; } }
+</style>
+</head>
+<body>
+
+<!-- Bộ biểu tượng thời tiết (vẽ bằng SVG, dùng lại nhiều nơi) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <radialGradient id="gSun" cx="40%" cy="35%" r="70%"><stop offset="0" stop-color="#fff6b8"/><stop offset=".55" stop-color="#ffc83a"/><stop offset="1" stop-color="#ff9a1f"/></radialGradient>
+    <linearGradient id="gMoon" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff8d2"/><stop offset="1" stop-color="#ffd25a"/></linearGradient>
+    <linearGradient id="gCloud" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#cfdbee"/></linearGradient>
+    <linearGradient id="gCloudD" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e6ecf6"/><stop offset="1" stop-color="#9fb0cb"/></linearGradient>
+    <linearGradient id="gBolt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff59a"/><stop offset="1" stop-color="#ffb300"/></linearGradient>
+    <mask id="mMoon"><rect width="64" height="64" fill="#fff"/><circle cx="42" cy="25" r="17" fill="#000"/></mask>
+
+    <path id="p-cloud" d="M20 48C12 48 8 42 10 36C12 30 18 28 22 29C23 21 30 16 37 17C44 18 48 24 48 29C55 29 58 35 56 41C55 46 51 48 46 48Z"/>
+
+    <g id="g-sun">
+      <g stroke="#ffb81f" stroke-width="3.6" stroke-linecap="round">
+        <path d="M32 5v6"/><path d="M32 5v6" transform="rotate(45 32 32)"/><path d="M32 5v6" transform="rotate(90 32 32)"/><path d="M32 5v6" transform="rotate(135 32 32)"/>
+        <path d="M32 5v6" transform="rotate(180 32 32)"/><path d="M32 5v6" transform="rotate(225 32 32)"/><path d="M32 5v6" transform="rotate(270 32 32)"/><path d="M32 5v6" transform="rotate(315 32 32)"/>
+      </g>
+      <circle cx="32" cy="32" r="14" fill="url(#gSun)"/>
+    </g>
+    <g id="g-moon">
+      <circle cx="30" cy="34" r="20" fill="url(#gMoon)" mask="url(#mMoon)"/>
+      <circle cx="50" cy="16" r="2.2" fill="#fff6c9"/><circle cx="44" cy="9" r="1.5" fill="#fff6c9"/><circle cx="56" cy="27" r="1.4" fill="#fff6c9"/>
+    </g>
+    <g id="g-cloud"><use href="#p-cloud" fill="url(#gCloud)"/></g>
+    <g id="g-cloudf">
+      <use href="#p-cloud" fill="url(#gCloud)"/>
+      <circle cx="27" cy="37" r="2" fill="#5b4b5e"/><circle cx="39" cy="37" r="2" fill="#5b4b5e"/>
+      <path d="M31 41Q33 44.5 35 41" fill="none" stroke="#5b4b5e" stroke-width="1.8" stroke-linecap="round"/>
+      <circle cx="22.5" cy="41" r="3" fill="#ff9db0" opacity=".55"/><circle cx="43.5" cy="41" r="3" fill="#ff9db0" opacity=".55"/>
+    </g>
+    <g id="g-suncloud">
+      <g transform="translate(4,-2) scale(.62)"><use href="#g-sun"/></g>
+      <g transform="translate(6,8) scale(.82)"><use href="#g-cloud"/></g>
+    </g>
+    <g id="g-mooncloud">
+      <g transform="translate(2,-3) scale(.66)"><use href="#g-moon"/></g>
+      <g transform="translate(6,8) scale(.82)"><use href="#g-cloud"/></g>
+    </g>
+    <g id="g-rain">
+      <g transform="translate(0,-6)"><use href="#p-cloud" fill="url(#gCloudD)"/></g>
+      <path d="M20 47l-3 9M31 50l-3 9M42 47l-3 9" stroke="#4aa3ff" stroke-width="3.6" stroke-linecap="round" fill="none"/>
+    </g>
+    <g id="g-storm">
+      <g transform="translate(0,-8)"><use href="#p-cloud" fill="url(#gCloudD)"/></g>
+      <path d="M35 38L26 52H32L29 62L42 45H35L39 38Z" fill="url(#gBolt)"/>
+    </g>
+    <g id="g-fog">
+      <g transform="translate(0,-8)"><use href="#p-cloud" fill="url(#gCloudD)"/></g>
+      <path d="M12 46h38M20 53h34" stroke="#fff" stroke-opacity=".85" stroke-width="3.6" stroke-linecap="round" fill="none"/>
+    </g>
+    <g id="g-snow">
+      <g transform="translate(0,-6)"><use href="#p-cloud" fill="url(#gCloudD)"/></g>
+      <circle cx="21" cy="52" r="2.8" fill="#fff"/><circle cx="32" cy="57" r="2.8" fill="#fff"/><circle cx="43" cy="52" r="2.8" fill="#fff"/>
+    </g>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Thời tiết của tôi</h1>
+      <p id="updated">Đang tải…</p>
+    </div>
+    <div class="tools">
+      <button class="pill glass" id="edit">Chỉnh sửa</button>
+      <button class="iconbtn glass" id="refresh" aria-label="Làm mới">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
+      </button>
+    </div>
+  </header>
+  <div class="banner" id="banner" hidden></div>
+  <main id="list" aria-live="polite"></main>
+</div>
+
+<button class="fab" id="add">+ Thêm địa điểm</button>
+
+<dialog id="dlg">
+  <div class="dlg">
+    <h2>Thêm địa điểm</h2>
+    <input class="field" id="q" type="search" placeholder="Nhập tên, ví dụ: Ninh Bình" autocomplete="off" aria-label="Tìm địa điểm">
+    <ul class="results" id="results"></ul>
+    <p class="msg" id="searchMsg"></p>
+
+    <h3>Không tìm thấy? Nhập tọa độ</h3>
+    <p class="sm">Trên Google Maps, chạm giữ vào đúng vị trí rồi chạm vào dãy số tọa độ để sao chép. Ví dụ: 18.9, 105.6</p>
+    <input class="field" id="mName" placeholder="Tên hiển thị, ví dụ: Quảng Châu, Nghệ An">
+    <div class="two">
+      <input class="field" id="mLat" inputmode="decimal" placeholder="Vĩ độ (lat)">
+      <input class="field" id="mLon" inputmode="decimal" placeholder="Kinh độ (lon)">
+    </div>
+    <p class="msg" id="manualMsg"></p>
+    <div class="btns">
+      <button class="ghost" id="close">Đóng</button>
+      <button class="primary" id="manualAdd">Thêm theo tọa độ</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  // ====== Địa điểm mặc định (sửa tại đây nếu muốn) ======
+  const DEFAULT_PLACES = [
+    { id: "tuliem",   name: "Từ Liêm, Hà Nội", lat: 21.0503, lon: 105.7650 },
+    { id: "ninhbinh", name: "Ninh Bình",       lat: 20.2506, lon: 105.9745 },
+    { id: "vinh",     name: "Vinh, Nghệ An",   lat: 18.6796, lon: 105.6813 }
+  ];
+  const REFRESH_MS = 10 * 60 * 1000;
+  const STALE_MS = 5 * 60 * 1000;
+
+  const $ = (s) => document.querySelector(s);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  };
+  let places = store.get("wx.places", null) || DEFAULT_PLACES.slice();
+  let data = store.get("wx.data", {});
+  let fetchedAt = store.get("wx.at", 0);
+  let openId = null, editing = false, loading = false, failed = false;
+
+  // Mã thời tiết WMO -> [mô tả, loại biểu tượng, màu thẻ]
+  function describe(code, isDay) {
+    const d = isDay === 1;
+    const t = {
+      0:  ["Trời quang", d ? "sun" : "moon", d ? "sun" : "night"],
+      1:  ["Ít mây", d ? "suncloud" : "mooncloud", d ? "sun" : "night"],
+      2:  ["Có mây", d ? "suncloud" : "mooncloud", d ? "cloud" : "nightcloud"],
+      3:  ["Nhiều mây", "cloud", d ? "cloud" : "nightcloud"],
+      45: ["Sương mù", "fog", d ? "fog" : "nightcloud"], 48: ["Sương mù đóng băng", "fog", d ? "fog" : "nightcloud"],
+      51: ["Mưa phùn nhẹ", "rain", "rain"], 53: ["Mưa phùn", "rain", "rain"], 55: ["Mưa phùn dày", "rain", "rain"],
+      56: ["Mưa phùn lạnh", "rain", "rain"], 57: ["Mưa phùn lạnh", "rain", "rain"],
+      61: ["Mưa nhỏ", "rain", "rain"], 63: ["Mưa vừa", "rain", "rain"], 65: ["Mưa to", "rain", "rain"],
+      66: ["Mưa lạnh", "rain", "rain"], 67: ["Mưa lạnh to", "rain", "rain"],
+      71: ["Tuyết nhẹ", "snow", "cloud"], 73: ["Tuyết", "snow", "cloud"], 75: ["Tuyết dày", "snow", "cloud"], 77: ["Hạt tuyết", "snow", "cloud"],
+      80: ["Mưa rào nhẹ", "rain", "rain"], 81: ["Mưa rào", "rain", "rain"], 82: ["Mưa rào rất to", "storm", "storm"],
+      85: ["Mưa tuyết nhẹ", "snow", "cloud"], 86: ["Mưa tuyết to", "snow", "cloud"],
+      95: ["Dông", "storm", "storm"], 96: ["Dông kèm mưa đá", "storm", "storm"], 99: ["Dông kèm mưa đá lớn", "storm", "storm"]
+    };
+    return t[code] || ["Không rõ", "cloud", "cloud"];
+  }
+  const icon = (kind, big) => `<svg viewBox="0 0 64 64" aria-hidden="true"><use href="#g-${big && kind === "cloud" ? "cloudf" : kind}"/></svg>`;
+  const DOW = ["CN", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
+  const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const r = (n) => Math.round(n);
+
+  // ====== Tải dữ liệu từ Open-Meteo (1 yêu cầu cho tất cả địa điểm) ======
+  async function load() {
+    if (loading) return;
+    if (!places.length) { render(); return; }
+    loading = true; failed = false;
+    $("#refresh").classList.add("spin");
+    render();
+    const url = "https://api.open-meteo.com/v1/forecast"
+      + "?latitude=" + places.map((p) => p.lat).join(",")
+      + "&longitude=" + places.map((p) => p.lon).join(",")
+      + "&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,is_day"
+      + "&hourly=temperature_2m,precipitation_probability,weather_code,is_day"
+      + "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
+      + "&timezone=auto&forecast_days=5&wind_speed_unit=kmh";
+    try {
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) throw new Error("Máy chủ trả về mã " + res.status);
+      let json = await res.json();
+      if (!Array.isArray(json)) json = [json];
+      const next = {};
+      places.forEach((p, i) => { if (json[i] && json[i].current) next[p.id] = json[i]; });
+      if (!Object.keys(next).length) throw new Error("Dữ liệu trả về trống");
+      data = next; fetchedAt = Date.now();
+      store.set("wx.data", data); store.set("wx.at", fetchedAt);
+      $("#banner").hidden = true;
+    } catch (e) {
+      failed = true;
+      const has = Object.keys(data).length > 0;
+      const b = $("#banner");
+      b.hidden = false;
+      b.innerHTML = (has ? "Chưa cập nhật được. Đang hiển thị dữ liệu đã lưu lần trước." : "Chưa tải được dữ liệu thời tiết.")
+        + "<small>Lý do: " + esc(e.message || e) + ". Kiểm tra mạng rồi chạm nút làm mới. Nếu bạn đang xem thử trong khung xem trước của Claude, hãy mở trang bằng trình duyệt thật hoặc trên GitHub Pages vì khung xem trước chặn kết nối mạng.</small>";
+    } finally {
+      loading = false;
+      $("#refresh").classList.remove("spin");
+      render();
+    }
+  }
+
+  // ====== Hiển thị ======
+  function updatedText() {
+    if (!fetchedAt) return "Chưa có dữ liệu";
+    const d = new Date(fetchedAt);
+    const hh = String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+    const mins = Math.max(0, Math.round((Date.now() - fetchedAt) / 60000));
+    return "Cập nhật lúc " + hh + (mins >= 1 ? " (" + mins + " phút trước)" : " (vừa xong)");
+  }
+
+  function hintFor(w, i) {
+    const h = w.hourly;
+    for (let k = i; k < Math.min(i + 12, h.time.length); k++) {
+      const p = h.precipitation_probability[k] || 0;
+      if (p >= 60) return k === i ? "Khả năng mưa cao ngay lúc này (" + p + "%)" : "Có thể mưa khoảng " + h.time[k].slice(11, 16) + " (" + p + "%)";
+    }
+    return "Không có dấu hiệu mưa đáng kể trong 12 giờ tới";
+  }
+
+  function editBar(p) {
+    return `<div class="editbar">
+      <button class="eb del" data-del="${esc(p.id)}">− Xóa</button>
+      <button class="eb" data-rename="${esc(p.id)}">Đổi tên</button>
+      <button class="eb" data-up="${esc(p.id)}" aria-label="Chuyển lên">↑ Lên</button>
+      <button class="eb" data-down="${esc(p.id)}" aria-label="Chuyển xuống">↓ Xuống</button>
+    </div>`;
+  }
+
+  function cardHTML(p) {
+    const w = data[p.id];
+    const cls = "card" + (editing ? " editing" : "");
+    if (!w) {
+      if (loading) return `<div class="skeleton"></div>`;
+      return `<article class="${cls}" data-sky="error">${editBar(p)}<div class="head"><p class="place">${esc(p.name)}</p><p class="errtxt">${failed ? "Chưa tải được dữ liệu. Chạm nút làm mới ở góc trên." : "Chưa có dữ liệu."}</p></div></article>`;
+    }
+    const c = w.current, [txt, kind, sky] = describe(c.weather_code, c.is_day);
+    const h = w.hourly;
+    let i = h.time.indexOf(c.time.slice(0, 13) + ":00"); if (i < 0) i = 0;
+    const pop = h.precipitation_probability[i] ?? 0;
+
+    let row = "";
+    for (let k = i + 1; k <= i + 6 && k < h.time.length; k++) {
+      const [, hk] = describe(h.weather_code[k], h.is_day[k]);
+      row += `<div><b>${r(h.temperature_2m[k])}°</b>${icon(hk)}<span>${h.time[k].slice(11, 16)}</span></div>`;
+    }
+    let hours = "";
+    for (let k = i; k < Math.min(i + 24, h.time.length); k++) {
+      const [, hk] = describe(h.weather_code[k], h.is_day[k]);
+      hours += `<div class="hr"><span>${k === i ? "Bây giờ" : h.time[k].slice(11, 13) + "h"}</span>${icon(hk)}<b>${r(h.temperature_2m[k])}°</b><span>${h.precipitation_probability[k] ?? 0}%</span></div>`;
+    }
+    let days = "";
+    w.daily.time.forEach((t, k) => {
+      const dt = new Date(t + "T12:00:00");
+      const [dtxt, dk] = describe(w.daily.weather_code[k], 1);
+      days += `<li><span>${k === 0 ? "Hôm nay" : DOW[dt.getDay()]}</span><span title="${dtxt}">${icon(dk)}</span><span class="rain">Mưa ${w.daily.precipitation_probability_max[k] ?? 0}%</span><span class="mm">${r(w.daily.temperature_2m_max[k])}° <span>${r(w.daily.temperature_2m_min[k])}°</span></span></li>`;
+    });
+
+    const open = openId === p.id && !editing;
+    return `<article class="${cls}${open ? " open" : ""}" data-sky="${sky}">
+      ${editBar(p)}
+      <button class="head" aria-expanded="${open}" data-toggle="${esc(p.id)}">
+        <div class="top-row">
+          <div class="big-ic">${icon(kind, true)}</div>
+          <div class="temp">${r(c.temperature_2m)}<span class="ring"></span></div>
+          <div class="where"><p class="place">${esc(p.name)}</p><p class="cond">${txt}</p></div>
+        </div>
+        <div class="hourly">${row}</div>
+        <div class="meta">
+          <span class="chip">Cảm giác ${r(c.apparent_temperature)}°</span>
+          <span class="chip">Mưa ${pop}%</span>
+          <span class="chip">Ẩm ${c.relative_humidity_2m}%</span>
+          <span class="chip">Gió ${r(c.wind_speed_10m)} km/h</span>
+          <span class="chip">Cao ${r(w.daily.temperature_2m_max[0])}° / Thấp ${r(w.daily.temperature_2m_min[0])}°</span>
+        </div>
+        <p class="hint">${hintFor(w, i)}</p>
+        <p class="stamp">Số liệu đo lúc ${c.time.slice(11, 16)} (giờ địa phương)</p>
+        <div class="more" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></div>
+      </button>
+      <div class="detail">
+        <h3>24 giờ tới</h3><div class="hours">${hours}</div>
+        <h3>5 ngày tới</h3><ul class="days">${days}</ul>
+      </div>
+    </article>`;
+  }
+
+  function render() {
+    $("#updated").textContent = updatedText();
+    $("#edit").textContent = editing ? "Xong" : "Chỉnh sửa";
+    const list = $("#list");
+    if (!places.length) { list.innerHTML = `<div class="empty"><p>Chưa có địa điểm nào.</p><p>Chạm “Thêm địa điểm” để bắt đầu.</p></div>`; return; }
+    list.innerHTML = places.map(cardHTML).join("");
+  }
+
+  // ====== Tương tác ======
+  $("#list").addEventListener("click", (e) => {
+    const t = e.target.closest("[data-toggle],[data-rename],[data-up],[data-down],[data-del]");
+    if (!t) return;
+    const save = () => { store.set("wx.places", places); render(); };
+    if (t.dataset.toggle) {
+      if (editing) return;
+      openId = openId === t.dataset.toggle ? null : t.dataset.toggle; render();
+    } else if (t.dataset.rename) {
+      const p = places.find((x) => x.id === t.dataset.rename);
+      const n = prompt("Tên hiển thị mới:", p.name);
+      if (n && n.trim()) { p.name = n.trim(); save(); }
+    } else if (t.dataset.up || t.dataset.down) {
+      const id = t.dataset.up || t.dataset.down;
+      const i = places.findIndex((x) => x.id === id), j = t.dataset.up ? i - 1 : i + 1;
+      if (j >= 0 && j < places.length) { [places[i], places[j]] = [places[j], places[i]]; save(); }
+    } else if (t.dataset.del) {
+      const p = places.find((x) => x.id === t.dataset.del);
+      if (confirm("Xóa “" + p.name + "” khỏi danh sách?")) {
+        places = places.filter((x) => x.id !== p.id); delete data[p.id];
+        store.set("wx.data", data); save();
+      }
+    }
+  });
+
+  $("#edit").addEventListener("click", () => { editing = !editing; render(); });
+  $("#refresh").addEventListener("click", () => load());
+
+  // ====== Thêm địa điểm ======
+  const dlg = $("#dlg");
+  $("#add").addEventListener("click", () => { $("#q").value = ""; $("#results").innerHTML = ""; $("#searchMsg").textContent = ""; $("#manualMsg").textContent = ""; dlg.showModal(); });
+  $("#close").addEventListener("click", () => dlg.close());
+
+  function addPlace(name, lat, lon) {
+    if (places.some((p) => Math.abs(p.lat - lat) < 0.01 && Math.abs(p.lon - lon) < 0.01)) return false;
+    places.push({ id: "p" + Date.now().toString(36), name, lat: +lat.toFixed(4), lon: +lon.toFixed(4) });
+    store.set("wx.places", places);
+    return true;
+  }
+
+  let timer;
+  $("#q").addEventListener("input", (e) => {
+    clearTimeout(timer);
+    const v = e.target.value.trim();
+    if (v.length < 2) { $("#results").innerHTML = ""; $("#searchMsg").textContent = ""; return; }
+    timer = setTimeout(async () => {
+      $("#searchMsg").textContent = "Đang tìm…";
+      try {
+        const res = await fetch("https://geocoding-api.open-meteo.com/v1/search?count=8&language=vi&name=" + encodeURIComponent(v));
+        const j = await res.json();
+        const arr = j.results || [];
+        $("#searchMsg").textContent = arr.length ? "" : "Không tìm thấy. Hãy thử tên thị trấn gần đó hoặc nhập tọa độ bên dưới.";
+        $("#results").innerHTML = arr.map((x, i) => {
+          const sub = [x.admin2, x.admin1, x.country].filter(Boolean).join(", ");
+          return `<li><button data-i="${i}">${esc(x.name)}<small>${esc(sub)}</small></button></li>`;
+        }).join("");
+        $("#results").onclick = (ev) => {
+          const b = ev.target.closest("button[data-i]"); if (!b) return;
+          const x = arr[+b.dataset.i];
+          const label = [x.name, x.admin1 && x.admin1 !== x.name ? x.admin1 : ""].filter(Boolean).join(", ");
+          addPlace(label, x.latitude, x.longitude); dlg.close(); load();
+        };
+      } catch (err) { $("#searchMsg").textContent = "Không tìm được lúc này. Kiểm tra mạng rồi thử lại."; }
+    }, 350);
+  });
+
+  $("#manualAdd").addEventListener("click", () => {
+    const name = $("#mName").value.trim();
+    const lat = parseFloat($("#mLat").value.replace(",", "."));
+    const lon = parseFloat($("#mLon").value.replace(",", "."));
+    if (!name) { $("#manualMsg").textContent = "Hãy nhập tên hiển thị."; return; }
+    if (!(lat >= -90 && lat <= 90) || !(lon >= -180 && lon <= 180)) { $("#manualMsg").textContent = "Tọa độ chưa hợp lệ. Vĩ độ từ -90 đến 90, kinh độ từ -180 đến 180."; return; }
+    if (!addPlace(name, lat, lon)) { $("#manualMsg").textContent = "Vị trí này đã có trong danh sách."; return; }
+    $("#mName").value = $("#mLat").value = $("#mLon").value = "";
+    dlg.close(); load();
+  });
+
+  // ====== Tự làm mới ======
+  setInterval(() => { if (!document.hidden) load(); }, REFRESH_MS);
+  setInterval(() => { if (!document.hidden) $("#updated").textContent = updatedText(); }, 30000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - fetchedAt > STALE_MS) load(); });
+  window.addEventListener("online", () => load());
+
+  render();
+  load();
+})();
+</script>
+</body>
+</html>
