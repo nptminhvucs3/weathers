@@ -1,6 +1,6 @@
 // Service worker: giúp trình duyệt nhận trang là ứng dụng cài được, và mở nhanh/offline phần giao diện.
 // Dữ liệu thời tiết (API) luôn lấy trực tiếp từ mạng, không lưu ở đây.
-const CACHE = "thoitiet-v2";
+const CACHE = "thoitiet-v3";
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
