@@ -9,7 +9,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Thời tiết">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🌤️%3C/text%3E%3C/svg%3E">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -53,6 +55,7 @@
 
   .wrap { max-width: 560px; margin: 0 auto; padding: 14px 14px 100px; }
   header.top { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 4px 16px; }
+  header.top > div:first-child { min-width: 0; flex: 1; }
   header.top h1 { font-size: 1.4rem; font-weight: 700; margin: 0; letter-spacing: -.01em; text-shadow: 0 1px 8px rgba(10,40,90,.35); }
   header.top p { margin: 2px 0 0; font-size: .8rem; color: rgba(255,255,255,.85); text-shadow: 0 1px 6px rgba(10,40,90,.35); }
   .tools { display: flex; gap: 8px; align-items: center; }
@@ -154,6 +157,21 @@
   .btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
   .msg { font-size: .85rem; color: var(--muted); margin: 6px 0 0; min-height: 1.2em; }
 
+
+  /* Hiệu ứng thời tiết: canvas nằm sau nội dung thẻ */
+  .card { position: relative; }
+  .fx { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+  .editbar, .head, .detail { position: relative; z-index: 1; }
+
+  /* Chuyển động khi mở app */
+  .card.enter { animation: rise .7s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i, 0) * 90ms); }
+  @keyframes rise { from { opacity: 0; transform: translateY(28px) scale(.97); } to { opacity: 1; transform: none; } }
+  .card.enter .hourly > div { animation: fadeup .6s ease both; animation-delay: calc(var(--i, 0) * 90ms + 260ms + var(--j, 0) * 55ms); }
+  @keyframes fadeup { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+  .big-ic svg { animation: bob 5s ease-in-out infinite; }
+  @keyframes bob { 50% { transform: translateY(-4px); } }
+  @media (prefers-reduced-motion: reduce) { .card.enter, .card.enter .hourly > div, .big-ic svg { animation: none; } }
+
   @media (max-width: 380px) { .temp { font-size: 3.7rem; } .big-ic { width: 64px; height: 64px; } .hourly b { font-size: .95rem; } }
   @media (prefers-reduced-motion: reduce) { .iconbtn.spin svg, .skeleton { animation: none; } .more svg { transition: none; } }
 </style>
@@ -220,11 +238,14 @@
 <div class="wrap">
   <header class="top">
     <div>
-      <h1>Thời tiết của tôi</h1>
+      <h1>Thời tiết</h1>
       <p id="updated">Đang tải…</p>
     </div>
     <div class="tools">
       <button class="pill glass" id="edit">Chỉnh sửa</button>
+      <button class="iconbtn glass" id="fxbtn" aria-label="Bật hoặc tắt hiệu ứng thời tiết" aria-pressed="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M11 3l1.9 5.6L18.5 10.5l-5.6 1.9L11 18l-1.9-5.6L3.5 10.5l5.6-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
+      </button>
       <button class="iconbtn glass" id="refresh" aria-label="Làm mới">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 3v6h-6"/></svg>
       </button>
@@ -277,7 +298,7 @@
   let places = store.get("wx.places", null) || DEFAULT_PLACES.slice();
   let data = store.get("wx.data", {});
   let fetchedAt = store.get("wx.at", 0);
-  let openId = null, editing = false, loading = false, failed = false;
+  let openId = null, editing = false, loading = false, failed = false, intro = true;
 
   // Mã thời tiết WMO -> [mô tả, loại biểu tượng, màu thẻ]
   function describe(code, isDay) {
@@ -370,12 +391,15 @@
     </div>`;
   }
 
-  function cardHTML(p) {
-    const w = data[p.id];
-    const cls = "card" + (editing ? " editing" : "");
+  function cardHTML(p, idx) {
+    const w = (intro && loading) ? null : data[p.id];
+    const enter = intro && !loading;
+    const cls = "card" + (editing ? " editing" : "") + (enter ? " enter" : "");
+    const sty = ` style="--i:${idx}"`;
+    const cvs = `<canvas class="fx" data-fx="${esc(p.id)}" aria-hidden="true"></canvas>`;
     if (!w) {
       if (loading) return `<div class="skeleton"></div>`;
-      return `<article class="${cls}" data-sky="error">${editBar(p)}<div class="head"><p class="place">${esc(p.name)}</p><p class="errtxt">${failed ? "Chưa tải được dữ liệu. Chạm nút làm mới ở góc trên." : "Chưa có dữ liệu."}</p></div></article>`;
+      return `<article class="${cls}" data-sky="error"${sty}>${editBar(p)}<div class="head"><p class="place">${esc(p.name)}</p><p class="errtxt">${failed ? "Chưa tải được dữ liệu. Chạm nút làm mới ở góc trên." : "Chưa có dữ liệu."}</p></div></article>`;
     }
     const c = w.current, [txt, kind, sky] = describe(c.weather_code, c.is_day);
     const h = w.hourly;
@@ -385,7 +409,7 @@
     let row = "";
     for (let k = i + 1; k <= i + 6 && k < h.time.length; k++) {
       const [, hk] = describe(h.weather_code[k], h.is_day[k]);
-      row += `<div><b>${r(h.temperature_2m[k])}°</b>${icon(hk)}<span>${h.time[k].slice(11, 16)}</span></div>`;
+      row += `<div style="--j:${k - i}"><b>${r(h.temperature_2m[k])}°</b>${icon(hk)}<span>${h.time[k].slice(11, 16)}</span></div>`;
     }
     let hours = "";
     for (let k = i; k < Math.min(i + 24, h.time.length); k++) {
@@ -400,12 +424,12 @@
     });
 
     const open = openId === p.id && !editing;
-    return `<article class="${cls}${open ? " open" : ""}" data-sky="${sky}">
-      ${editBar(p)}
+    return `<article class="${cls}${open ? " open" : ""}" data-sky="${sky}"${sty}>
+      ${cvs}${editBar(p)}
       <button class="head" aria-expanded="${open}" data-toggle="${esc(p.id)}">
         <div class="top-row">
           <div class="big-ic">${icon(kind, true)}</div>
-          <div class="temp">${r(c.temperature_2m)}<span class="ring"></span></div>
+          <div class="temp"><span class="num" data-val="${r(c.temperature_2m)}" data-i="${idx}">${r(c.temperature_2m)}</span><span class="ring"></span></div>
           <div class="where"><p class="place">${esc(p.name)}</p><p class="cond">${txt}</p></div>
         </div>
         <div class="hourly">${row}</div>
@@ -432,7 +456,9 @@
     $("#edit").textContent = editing ? "Xong" : "Chỉnh sửa";
     const list = $("#list");
     if (!places.length) { list.innerHTML = `<div class="empty"><p>Chưa có địa điểm nào.</p><p>Chạm “Thêm địa điểm” để bắt đầu.</p></div>`; return; }
-    list.innerHTML = places.map(cardHTML).join("");
+    list.innerHTML = places.map((p, i) => cardHTML(p, i)).join("");
+    FX.bind();
+    if (!loading && intro) { intro = false; countUp(); }
   }
 
   // ====== Tương tác ======
@@ -518,8 +544,321 @@
   document.addEventListener("visibilitychange", () => { if (!document.hidden && Date.now() - fetchedAt > STALE_MS) load(); });
   window.addEventListener("online", () => load());
 
-  render();
-  load();
+  // ====== HIỆU ỨNG THỜI TIẾT (vẽ bằng canvas phía sau mỗi thẻ) ======
+  const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let fxOn = store.get("wx.fx", null);
+  if (fxOn === null) fxOn = !reduceMotion;
+  const RND = (a, b) => a + Math.random() * (b - a);
+  const DPR = () => Math.min(window.devicePixelRatio || 1, 2);
+
+  // Hình mây mềm vẽ sẵn một lần, dùng lại nhiều lần cho nhẹ máy
+  const sprites = {};
+  function cloudSprite(tint) {
+    if (sprites[tint]) return sprites[tint];
+    const cv = document.createElement("canvas"); cv.width = 260; cv.height = 120;
+    const g = cv.getContext("2d");
+    const col = { light: "255,255,255", gray: "215,224,238", dark: "150,162,186", night: "150,170,215" }[tint];
+    [[70, 74, 38], [110, 56, 48], [158, 64, 42], [196, 78, 32], [130, 84, 44], [90, 86, 30]].forEach(([x, y, r]) => {
+      const gr = g.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, "rgba(" + col + ",.9)"); gr.addColorStop(.6, "rgba(" + col + ",.45)"); gr.addColorStop(1, "rgba(" + col + ",0)");
+      g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+    });
+    return (sprites[tint] = cv);
+  }
+  function fogSprite() {
+    if (sprites.fog) return sprites.fog;
+    const cv = document.createElement("canvas"); cv.width = 360; cv.height = 110;
+    const g = cv.getContext("2d");
+    g.translate(180, 55); g.scale(1, .28);
+    const gr = g.createRadialGradient(0, 0, 0, 0, 0, 180);
+    gr.addColorStop(0, "rgba(255,255,255,.55)"); gr.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = gr; g.fillRect(-180, -300, 360, 600);
+    return (sprites.fog = cv);
+  }
+
+  // Mỗi "lớp" hiệu ứng có fit(w,h) để chỉnh số hạt theo kích thước thẻ và draw(...) để vẽ
+  function cloudsLayer(n, tint, alpha) {
+    const L = {
+      items: [],
+      fit(w, h) {
+        const hh = Math.min(h, 260);
+        while (L.items.length < n) L.items.push({ x: RND(-100, w), y: RND(-10, hh * .5), s: RND(.7, 1.3), v: RND(6, 16), a: RND(.35, .7) * alpha });
+        L.items.length = n;
+      },
+      draw(c, w, h, dt) {
+        const sp = cloudSprite(tint);
+        L.items.forEach((o) => {
+          o.x += o.v * dt;
+          const sw = 260 * o.s; if (o.x > w + 10) o.x = -sw;
+          c.globalAlpha = o.a; c.drawImage(sp, o.x, o.y, sw, 120 * o.s);
+        });
+        c.globalAlpha = 1;
+      }
+    };
+    return L;
+  }
+
+  // Mưa: 0 = mưa phùn bay bay, 1 = nhỏ, 2 = vừa, 3 = to
+  const RAIN = {
+    0: { n: 26,  v: [150, 230],  len: [7, 12],  sl: .10, a: .40 },
+    1: { n: 48,  v: [480, 640],  len: [12, 18], sl: .18, a: .45 },
+    2: { n: 96,  v: [700, 900],  len: [16, 24], sl: .26, a: .50 },
+    3: { n: 180, v: [950, 1250], len: [22, 34], sl: .40, a: .55 }
+  };
+  function rainLayer(level, wind) {
+    const P = RAIN[level], sl = P.sl + Math.min(wind / 90, .18);
+    const L = {
+      d: [],
+      mk(w, h, init) {
+        const z = (Math.random() * 3) | 0;
+        return { x: RND(-h * sl, w), y: init ? RND(-h * .1, h) : RND(-40, -5), z, v: RND(P.v[0], P.v[1]) * (.8 + z * .2), len: RND(P.len[0], P.len[1]) * (.7 + z * .25), ph: RND(0, 6.28) };
+      },
+      fit(w, h) {
+        const n = Math.round(P.n * Math.min(2.2, Math.max(.6, (w * h) / 93600)));
+        while (L.d.length < n) L.d.push(L.mk(w, h, true));
+        L.d.length = Math.min(L.d.length, n);
+      },
+      draw(c, w, h, dt, t) {
+        c.lineCap = "round";
+        const b = [[], [], []];
+        for (const o of L.d) {
+          o.y += o.v * dt;
+          o.x += o.v * sl * dt + (level === 0 ? Math.sin(t * 1.4 + o.ph) * 14 * dt : 0);
+          if (o.y - o.len > h || o.x > w + 40) Object.assign(o, L.mk(w, h, false));
+          b[o.z].push(o);
+        }
+        for (let z = 0; z < 3; z++) {
+          c.strokeStyle = "rgba(215,232,255," + (P.a * (.55 + z * .25)) + ")";
+          c.lineWidth = level === 0 ? 1 : .8 + z * .5;
+          c.beginPath();
+          for (const o of b[z]) { c.moveTo(o.x, o.y); c.lineTo(o.x - o.len * sl, o.y - o.len); }
+          c.stroke();
+        }
+      }
+    };
+    return L;
+  }
+
+  function lightningLayer() {
+    const L = {
+      next: 2, flash: 0, second: false, bolt: null,
+      fit() {},
+      draw(c, w, h, dt, t) {
+        if (t > L.next) {
+          L.flash = 1; L.second = true; L.next = t + RND(3, 8);
+          let x = RND(w * .2, w * .8), y = 0; const pts = [[x, y]], endY = h * RND(.45, .8);
+          while (y < endY) { y += RND(16, 30); x += RND(-16, 16); pts.push([x, y]); }
+          L.bolt = pts;
+        }
+        if (L.flash > 0) {
+          L.flash -= dt * 3.2;
+          if (L.flash < .45 && L.second) { L.flash = .95; L.second = false; }
+          const f = Math.max(0, L.flash);
+          c.fillStyle = "rgba(225,232,255," + (f * .35) + ")"; c.fillRect(0, 0, w, h);
+          if (L.bolt && f > .2) {
+            c.strokeStyle = "rgba(255,255,255," + f + ")"; c.lineWidth = 2; c.lineJoin = "round";
+            c.shadowColor = "#c9d6ff"; c.shadowBlur = 14;
+            c.beginPath(); L.bolt.forEach((p, i) => (i ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1]))); c.stroke();
+            c.shadowBlur = 0;
+          }
+        }
+      }
+    };
+    return L;
+  }
+
+  const SNOW = { 1: 34, 2: 70, 3: 130 };
+  function snowLayer(level, wind) {
+    const N = SNOW[level], drift = Math.min(wind, 30) * .6;
+    const L = {
+      f: [],
+      mk(w, h, init) { return { x: RND(0, w), y: init ? RND(0, h) : RND(-20, -4), r: RND(1.2, 3.4), v: RND(40, 90) * (.8 + level * .15), ph: RND(0, 6.28), sw: RND(10, 28) }; },
+      fit(w, h) {
+        const n = Math.round(N * Math.min(2.2, Math.max(.6, (w * h) / 93600)));
+        while (L.f.length < n) L.f.push(L.mk(w, h, true));
+        L.f.length = Math.min(L.f.length, n);
+      },
+      draw(c, w, h, dt, t) {
+        c.fillStyle = "rgba(255,255,255,.85)"; c.beginPath();
+        for (const o of L.f) {
+          o.y += o.v * dt; o.x += (Math.sin(t * .8 + o.ph) * o.sw + drift) * dt;
+          if (o.y > h + 6) Object.assign(o, L.mk(w, h, false));
+          if (o.x > w + 6) o.x = -6; else if (o.x < -6) o.x = w + 6;
+          c.moveTo(o.x + o.r, o.y); c.arc(o.x, o.y, o.r, 0, 6.3);
+        }
+        c.fill();
+      }
+    };
+    return L;
+  }
+
+  // Trời nắng: quầng sáng ấm, tia nắng xoay chậm, hạt sáng trôi lên
+  function sunLayer(k) {
+    const L = {
+      b: [],
+      fit(w, h) { while (L.b.length < 8) L.b.push({ x: RND(0, w), y: RND(0, h), r: RND(3, 9), v: RND(6, 16), a: RND(.06, .16), ph: RND(0, 6) }); },
+      draw(c, w, h, dt, t) {
+        const cx = w * .16, cy = h * .1, big = Math.hypot(w, h), p = .85 + .15 * Math.sin(t * .9);
+        c.save(); c.globalCompositeOperation = "lighter";
+        const gr = c.createRadialGradient(cx, cy, 0, cx, cy, big * .8);
+        gr.addColorStop(0, "rgba(255,226,150," + (.55 * k * p) + ")");
+        gr.addColorStop(.35, "rgba(255,200,110," + (.18 * k * p) + ")");
+        gr.addColorStop(1, "rgba(255,200,110,0)");
+        c.fillStyle = gr; c.fillRect(0, 0, w, h);
+        c.fillStyle = "rgba(255,240,200," + (.07 * k) + ")";
+        for (let i = 0; i < 9; i++) {
+          const a = t * .06 + i * .7, s = .07;
+          c.beginPath(); c.moveTo(cx, cy);
+          c.lineTo(cx + Math.cos(a - s) * big * 1.2, cy + Math.sin(a - s) * big * 1.2);
+          c.lineTo(cx + Math.cos(a + s) * big * 1.2, cy + Math.sin(a + s) * big * 1.2);
+          c.closePath(); c.fill();
+        }
+        c.fillStyle = "rgb(255,244,210)";
+        for (const o of L.b) {
+          o.y -= o.v * dt; if (o.y < -10) { o.y = h + 10; o.x = RND(0, w); }
+          c.globalAlpha = o.a * (.6 + .4 * Math.sin(t + o.ph));
+          c.beginPath(); c.arc(o.x, o.y, o.r, 0, 6.3); c.fill();
+        }
+        c.restore();
+      }
+    };
+    return L;
+  }
+
+  // Đêm: sao nhấp nháy và thỉnh thoảng có sao băng
+  function starsLayer(n) {
+    const L = {
+      s: [], shoot: null, next: 4,
+      fit(w, h) {
+        const hh = Math.min(h, 240);
+        while (L.s.length < n) L.s.push({ x: RND(0, w), y: RND(0, hh), r: RND(.6, 1.8), ph: RND(0, 6.28), sp: RND(.8, 2.4) });
+        L.s.length = n;
+      },
+      draw(c, w, h, dt, t) {
+        c.fillStyle = "#fff";
+        for (const o of L.s) { c.globalAlpha = .25 + .75 * (.5 + .5 * Math.sin(t * o.sp + o.ph)); c.beginPath(); c.arc(o.x, o.y, o.r, 0, 6.3); c.fill(); }
+        c.globalAlpha = 1;
+        if (!L.shoot && t > L.next) { L.shoot = { x: RND(w * .4, w * .95), y: RND(0, Math.min(h, 200) * .4), life: 0 }; L.next = t + RND(6, 12); }
+        if (L.shoot) {
+          const s = L.shoot; s.life += dt;
+          const hx = s.x - 300 * s.life, hy = s.y + 165 * s.life, tx = hx + 70, ty = hy - 38;
+          const g = c.createLinearGradient(tx, ty, hx, hy);
+          g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(1, "rgba(255,255,255,.9)");
+          c.strokeStyle = g; c.lineWidth = 1.6; c.lineCap = "round";
+          c.beginPath(); c.moveTo(tx, ty); c.lineTo(hx, hy); c.stroke();
+          if (s.life > .9) L.shoot = null;
+        }
+      }
+    };
+    return L;
+  }
+
+  function fogLayer() {
+    const L = {
+      b: [],
+      fit(w, h) {
+        const hh = Math.min(h, 260);
+        while (L.b.length < 4) { const i = L.b.length; L.b.push({ x: RND(-200, w), y: (hh / 4) * i + RND(0, 20), s: RND(.9, 1.5), v: RND(8, 20), a: RND(.35, .65) }); }
+      },
+      draw(c, w, h, dt) {
+        const sp = fogSprite();
+        for (const o of L.b) {
+          o.x += o.v * dt; const sw = 360 * o.s * 1.4; if (o.x > w + 10) o.x = -sw;
+          c.globalAlpha = o.a; c.drawImage(sp, o.x, o.y, sw, 110 * o.s * 1.2);
+        }
+        c.globalAlpha = 1;
+      }
+    };
+    return L;
+  }
+
+  // Chọn hiệu ứng theo mã thời tiết, ngày/đêm và sức gió
+  function fxFor(w) {
+    const c = w.current, code = c.weather_code, day = c.is_day === 1, wind = c.wind_speed_10m || 0;
+    if (code === 95 || code === 96 || code === 99) return { key: "storm", layers: () => [cloudsLayer(4, "dark", .8), rainLayer(3, wind), lightningLayer()] };
+    const rl = { 51: 0, 53: 0, 55: 0, 56: 0, 57: 0, 61: 1, 66: 1, 80: 1, 63: 2, 81: 2, 65: 3, 67: 3, 82: 3 }[code];
+    if (rl !== undefined) return { key: "rain" + rl + (wind > 25 ? "w" : ""), layers: () => [cloudsLayer(rl >= 2 ? 4 : 3, "dark", rl === 0 ? .5 : .75), rainLayer(rl, wind)] };
+    const sl = { 71: 1, 77: 1, 85: 1, 73: 2, 75: 3, 86: 3 }[code];
+    if (sl !== undefined) return { key: "snow" + sl, layers: () => [cloudsLayer(3, "gray", .5), snowLayer(sl, wind)] };
+    if (code === 45 || code === 48) return { key: "fog" + day, layers: () => [fogLayer(), cloudsLayer(2, day ? "gray" : "night", .5)] };
+    if (code === 0) return day ? { key: "sun", layers: () => [sunLayer(1)] } : { key: "night", layers: () => [starsLayer(55)] };
+    if (code === 1) return day ? { key: "sun1", layers: () => [sunLayer(.8), cloudsLayer(2, "light", .9)] } : { key: "night1", layers: () => [starsLayer(40), cloudsLayer(1, "night", .8)] };
+    if (code === 2) return day ? { key: "sun2", layers: () => [sunLayer(.5), cloudsLayer(3, "light", .9)] } : { key: "night2", layers: () => [starsLayer(22), cloudsLayer(3, "night", .8)] };
+    return day ? { key: "cloud", layers: () => [cloudsLayer(5, "gray", 1)] } : { key: "cloudn", layers: () => [cloudsLayer(5, "night", 1)] };
+  }
+
+  const FX = {
+    states: {}, ro: null, io: null, vis: new WeakMap(),
+    bind() {
+      if (this.ro) this.ro.disconnect();
+      if (this.io) this.io.disconnect();
+      this.ro = new ResizeObserver((es) => es.forEach((e) => this.size(e.target)));
+      this.io = new IntersectionObserver((es) => es.forEach((e) => this.vis.set(e.target, e.isIntersecting)));
+      for (const id in this.states) if (!places.some((p) => p.id === id)) delete this.states[id];
+      document.querySelectorAll("canvas.fx").forEach((cv) => {
+        const id = cv.dataset.fx, w = data[id];
+        if (!w || !w.current) return;
+        const info = fxFor(w);
+        let st = this.states[id];
+        if (!st || st.key !== info.key) st = this.states[id] = { key: info.key, layers: info.layers(), t: 0 };
+        st.cv = cv; cv._st = st; this.vis.set(cv, true);
+        this.size(cv); this.ro.observe(cv); this.io.observe(cv);
+      });
+    },
+    size(cv) {
+      const st = cv._st; if (!st) return;
+      const rc = cv.getBoundingClientRect(), d = DPR();
+      const w = Math.max(1, Math.round(rc.width)), h = Math.max(1, Math.round(rc.height));
+      if (cv.width !== w * d || cv.height !== h * d) { cv.width = w * d; cv.height = h * d; }
+      st.w = w; st.h = h; st.d = d;
+      st.layers.forEach((l) => l.fit(w, h));
+    },
+    clear() {
+      document.querySelectorAll("canvas.fx").forEach((cv) => { const c = cv.getContext("2d"); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, cv.width, cv.height); });
+    }
+  };
+
+  let lastTs = 0;
+  function tick(ts) {
+    requestAnimationFrame(tick);
+    const dt = Math.min(.05, (ts - lastTs) / 1000 || 0); lastTs = ts;
+    if (!fxOn || document.hidden) return;
+    for (const id in FX.states) {
+      const st = FX.states[id], cv = st.cv;
+      if (!cv || !cv.isConnected || FX.vis.get(cv) === false || !st.w) continue;
+      st.t += dt;
+      const c = cv.getContext("2d");
+      c.setTransform(st.d, 0, 0, st.d, 0, 0); c.clearRect(0, 0, st.w, st.h);
+      for (const l of st.layers) l.draw(c, st.w, st.h, dt, st.t);
+    }
+  }
+  requestAnimationFrame(tick);
+
+  // Khi mở app: số nhiệt độ chạy từ 0 lên giá trị thật
+  function countUp() {
+    document.querySelectorAll(".num").forEach((el) => {
+      const to = +el.dataset.val, t0 = performance.now() + (+el.dataset.i || 0) * 90, dur = 800;
+      el.textContent = "0";
+      const step = (now) => {
+        const k = Math.min(1, Math.max(0, (now - t0) / dur)), e = 1 - Math.pow(1 - k, 3);
+        el.textContent = Math.round(to * e);
+        if (k < 1) requestAnimationFrame(step);
+      };
+      requestAnimationFrame(step);
+    });
+  }
+
+  const fxBtn = $("#fxbtn");
+  const paintFx = () => { fxBtn.setAttribute("aria-pressed", fxOn ? "true" : "false"); fxBtn.style.opacity = fxOn ? 1 : .55; };
+  fxBtn.addEventListener("click", () => { fxOn = !fxOn; store.set("wx.fx", fxOn); paintFx(); if (!fxOn) FX.clear(); });
+  paintFx();
+
+  // Đăng ký service worker để Chrome cho phép "Cài đặt ứng dụng" (chỉ chạy khi có https)
+  if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+    window.addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
+  }
+
+  load(); // load() tự vẽ khung chờ trước, rồi vẽ thẻ kèm hiệu ứng khi có dữ liệu
 })();
 </script>
 </body>
